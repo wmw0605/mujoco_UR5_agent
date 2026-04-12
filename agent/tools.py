@@ -124,6 +124,60 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "pick_object",
+            "description": "单独抓取并提起一个指定的物体，抓起后保持在抓取点上方悬空。如果只需要抓起来，调用此工具即可。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "object_name": {
+                        "type": "string",
+                        "description": "要抓取的物体名称，例如 'red_cube'、'green_cube'、'blue_cylinder'、'yellow_cube'",
+                    },
+                },
+                "required": ["object_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "place_object",
+            "description": "将当前抓取的物体放置到指定的三维坐标位置。配合 pick_object 使用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {
+                        "type": "number",
+                        "description": "目标放置位置的 X 坐标（米）",
+                    },
+                    "y": {
+                        "type": "number",
+                        "description": "目标放置位置的 Y 坐标（米）",
+                    },
+                    "z": {
+                        "type": "number",
+                        "description": "目标放置位置的 Z 坐标（米），通常为桌面高度 0.39m",
+                    },
+                },
+                "required": ["x", "y", "z"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "scan_workspace",
+            "description": "使用腕部 RGB-D 相机扫描工作空间并检测物体。机械臂将自动移动到桌面上方的扫描位置，捕获彩色图像和深度图，通过视觉算法检测物体并计算其 3D 世界坐标。这是获取物体位置的主要方式，每次操作前必须先调用此工具。",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
 ]
 
 
@@ -186,6 +240,23 @@ def execute_tool(tool_name: str, arguments: dict, robot: RobotInterface) -> str:
                 "message": f"抓取: {pick_result['message']}; 放置: {place_result['message']}",
             }
             return json.dumps(combined, ensure_ascii=False)
+
+        elif tool_name == "pick_object":
+            object_name = arguments["object_name"]
+            result = robot.pick_object(object_name)
+            return json.dumps(result, ensure_ascii=False)
+
+        elif tool_name == "place_object":
+            x = float(arguments["x"])
+            y = float(arguments["y"])
+            z = float(arguments["z"])
+            result = robot.place_object(x, y, z)
+            return json.dumps(result, ensure_ascii=False)
+
+        elif tool_name == "scan_workspace":
+            result = robot.scan_workspace()
+            # 返回场景描述文本（包含所有检测到的物体信息）
+            return result.get("description", json.dumps(result, ensure_ascii=False))
 
         else:
             return json.dumps({

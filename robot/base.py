@@ -119,3 +119,20 @@ class RobotInterface(ABC):
             {"success": bool, "message": str}
         """
         pass
+
+    @abstractmethod
+    def scan_workspace(self) -> dict:
+        """使用腕部相机扫描工作空间并检测物体
+
+        机械臂将移动到扫描位姿，使用腕部相机捕获 RGB-D 图像，
+        通过视觉算法检测物体并返回 3D 世界坐标。
+
+        Returns:
+            {
+                "success": bool,
+                "message": str,
+                "objects": list[dict],  # 检测到的物体列表
+                "description": str,     # 场景文本描述
+            }
+        """
+        pass

@@ -124,9 +124,8 @@ class SimRobot(RobotInterface):
                 "message": f"未找到物体: {object_name}",
             }
 
-        # 调整抓取位置（稍微高于物体中心，确保夹爪可以包住物体）
+        # 调整抓取位置（直接使用物体中心，controller.pick 会处理 pinch 偏移）
         grasp_pos = pos.copy()
-        grasp_pos[2] += 0.02  # 稍微高于物体中心
 
         success = bool(self.controller.pick(grasp_pos))
         desc = self.env.OBJECT_DESCRIPTIONS.get(object_name, object_name)
@@ -157,6 +156,83 @@ class SimRobot(RobotInterface):
             RGB 图像
         """
         return self.camera.capture_rgb(camera_name)
+
+    def scan_workspace(self) -> dict:
+        """使用腕部相机扫描工作空间并检测物体
+
+        采用多位置扫描策略，确保覆盖整个桌面并避免机械臂自遮挡：
+        1. 打开夹爪避免遮挡
+        2. 依次移到多个扫描位姿（中心、左前、右前）
+        3. 每个位置进行视觉检测
+        4. 合并去重所有检测结果
+        5. 保存最终检测可视化
+
+        Returns:
+            {"success": bool, "message": str, "objects": list, "description": str}
+        """
+        print("[SimRobot] 开始多位置腕部相机扫描...")
+
+        # 1. 打开夹爪避免遮挡视野
+        self.controller.open_gripper()
+
+        # 2. 定义多个扫描位姿（覆盖桌面不同区域）
+        scan_quat = np.array([0.0, 1.0, 0.0, 0.0])  # 竖直向下
+        scan_positions = [
+            np.array([0.35, 0.0, 0.70]),    # 中心
+            np.array([0.50, 0.15, 0.70]),   # 左前
+            np.array([0.50, -0.15, 0.70]),  # 右前
+        ]
+
+        all_detected = {}  # name -> best detection (highest confidence)
+        last_rgb = None
+
+        for i, scan_pos in enumerate(scan_positions):
+            print(f"[SimRobot] 扫描位置 {i+1}/{len(scan_positions)}: {scan_pos}")
+            success = bool(self.controller.move_to_pose(scan_pos, scan_quat))
+            if not success:
+                print(f"[SimRobot] 无法到达扫描位置 {i+1}，跳过")
+                continue
+
+            # 等待稳定
+            self.env.step(300)
+
+            # 视觉检测
+            detected, rgb, depth = self.camera.detect_objects_by_vision("wrist_cam")
+            last_rgb = rgb
+
+            # 合并结果（保留置信度最高的检测）
+            for obj in detected:
+                name = obj["name"]
+                if name not in all_detected or obj.get("confidence", 0) > all_detected[name].get("confidence", 0):
+                    all_detected[name] = obj
+
+        # 3. 汇总结果
+        final_detected = list(all_detected.values())
+
+        # 4. 保存最后一次扫描的检测可视化
+        from pathlib import Path
+        output_dir = Path(__file__).parent.parent
+        if last_rgb is not None:
+            self.camera.save_detection_image(
+                last_rgb, final_detected, str(output_dir / "detection_result.png")
+            )
+
+        # 5. 生成场景描述
+        description = self.camera.get_vision_scene_description(
+            final_detected, "wrist_cam"
+        )
+
+        # 缓存最新的检测结果
+        self._last_scan_result = final_detected
+
+        print(f"[SimRobot] 扫描完成，共检测到 {len(final_detected)} 个物体")
+
+        return {
+            "success": True,
+            "message": f"扫描完成，检测到 {len(final_detected)} 个物体",
+            "objects": final_detected,
+            "description": description,
+        }
 
     def get_robot_state(self) -> dict:
         """获取完整的机器人状态"""

@@ -21,7 +21,7 @@ class Config:
 
     # ==================== Qwen Agent 配置 ====================
     qwen_model: str = "qwen-max"  # qwen-max / qwen-plus / qwen-turbo
-    dashscope_api_key: str = ""
+    dashscope_api_key: str = "sk-f1c8b422da5d4582b78a5ad5e0e7557b"
     dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
     # ==================== 真实机器人配置 ====================

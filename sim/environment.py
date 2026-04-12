@@ -102,18 +102,51 @@ class SimEnvironment:
         self.render_enabled = render
         self.viewer = None
         self._viewer_thread = None
+
+        # 相机视角列表: (按键, 相机名称/None=自由视角, 显示名称)
+        self._camera_views = [
+            (ord('1'), None, "自由视角 (Free Camera)"),
+            (ord('2'), "overhead_cam", "俯视相机 (Overhead)"),
+            (ord('3'), "side_cam", "侧视相机 (Side)"),
+            (ord('4'), "wrist_cam", "腕部相机 (Wrist)"),
+        ]
+
         if render:
             self._start_viewer()
 
         print("[SimEnv] 仿真环境初始化完成")
 
+    def _key_callback(self, key):
+        """键盘回调：按数字键 1-4 切换相机视角"""
+        for bind_key, cam_name, display_name in self._camera_views:
+            if key == bind_key:
+                if cam_name is None:
+                    # 自由视角
+                    self.viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FREE
+                else:
+                    # 固定相机
+                    cam_id = mujoco.mj_name2id(
+                        self.model, mujoco.mjtObj.mjOBJ_CAMERA, cam_name
+                    )
+                    if cam_id >= 0:
+                        self.viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FIXED
+                        self.viewer.cam.fixedcamid = cam_id
+                    else:
+                        print(f"[SimEnv] 未找到相机: {cam_name}")
+                        return
+                print(f"[SimEnv] 相机切换 → {display_name}")
+                return
+
     def _start_viewer(self):
         """启动 MuJoCo GUI viewer（在主线程或后台线程）"""
         try:
             self.viewer = mujoco.viewer.launch_passive(
-                self.model, self.data, show_left_ui=True, show_right_ui=True
+                self.model, self.data,
+                key_callback=self._key_callback,
+                show_left_ui=True, show_right_ui=True,
             )
             print("[SimEnv] GUI Viewer 已启动")
+            print("[SimEnv] 按键切换相机: 1=自由视角  2=俯视  3=侧视  4=腕部相机")
         except Exception as e:
             print(f"[SimEnv] 警告: 无法启动 GUI Viewer: {e}")
             print("[SimEnv] 将以无头模式运行")
@@ -257,9 +290,25 @@ class SimEnvironment:
         for name in self.OBJECT_NAMES:
             try:
                 pos, quat = self.get_body_pose(name)
+                # 计算碰撞体半高度
+                body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name)
+                geom_id = self.model.body_geomadr[body_id]
+                if geom_id >= 0:
+                    geom_type = self.model.geom_type[geom_id]
+                    size = self.model.geom_size[geom_id]
+                    if geom_type == mujoco.mjtGeom.mjGEOM_CYLINDER:
+                        half_height = float(size[1])
+                    elif geom_type == mujoco.mjtGeom.mjGEOM_CAPSULE:
+                        half_height = float(size[1] + size[0]) # half_len + radius
+                    else:
+                        half_height = float(size[2])
+                else:
+                    half_height = 0.0
+
                 objects[name] = {
                     "pos": pos,
                     "quat": quat,
+                    "half_height": half_height,
                     "description": self.OBJECT_DESCRIPTIONS.get(name, name),
                 }
             except ValueError:

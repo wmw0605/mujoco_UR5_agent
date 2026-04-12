@@ -186,6 +186,22 @@ class RealRobot(RobotInterface):
             "message": f"已放置到 ({x:.3f}, {y:.3f}, {z:.3f})",
         }
 
+    def scan_workspace(self) -> dict:
+        """使用腕部相机扫描工作空间
+
+        TODO: 连接真实 RGB-D 相机（如 RealSense D435），实现:
+        1. 移动到扫描位姿
+        2. 捕获 RGB-D 图像
+        3. 运行物体检测算法
+        4. 深度投影获取 3D 坐标
+        """
+        return {
+            "success": False,
+            "message": "真实机器人的相机扫描尚未实现，需要配置 RGB-D 相机硬件",
+            "objects": [],
+            "description": "扫描失败：真实相机硬件未配置。",
+        }
+
     def close(self):
         """断开连接"""
         try:
